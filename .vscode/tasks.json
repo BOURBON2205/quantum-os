@@ -1,0 +1,10 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "Build", "type": "shell", "command": "make", "group": { "kind": "build", "isDefault": true }, "problemMatcher": ["$gcc"] },
+    { "label": "Run (jendela QEMU + serial)", "type": "shell", "command": "make run", "dependsOn": "Build", "problemMatcher": [] },
+    { "label": "Run (terminal saja)", "type": "shell", "command": "make run-serial", "dependsOn": "Build", "problemMatcher": [] },
+    { "label": "Debug server (QEMU -s -S)", "type": "shell", "command": "make debug", "isBackground": true, "problemMatcher": [] },
+    { "label": "Clean", "type": "shell", "command": "make clean", "problemMatcher": [] }
+  ]
+}

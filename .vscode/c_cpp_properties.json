@@ -1,0 +1,7 @@
+{
+  "version": 4,
+  "configurations": [
+    { "name": "QuantumOS", "includePath": ["${workspaceFolder}/src"], "defines": [], "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11", "intelliSenseMode": "linux-gcc-x86", "compilerArgs": ["-m32", "-ffreestanding"] }
+  ]
+}
