@@ -35,6 +35,8 @@ void kprintf(const char *fmt, ...);
 void console_clear(void);
 void console_color(u8 c);              /* warna teks 0-15 (VGA) + ANSI di serial */
 void console_set_header_end(void);     /* baris di atas posisi kursor jadi header tetap */
+void console_get_cursor(int *x, int *y);
+int  console_get_mouse_click(int *x, int *y);
 #define KEY_UP    0x101
 #define KEY_DOWN  0x102
 #define KEY_LEFT  0x103

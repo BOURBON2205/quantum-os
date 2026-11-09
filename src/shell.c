@@ -37,7 +37,7 @@ void banner(void) {                                /* kalkulator basis QuantumOS
     console_color(11); kputs("NUMBER BASE CALCULATOR\n");
     console_color(7);  kputs("BIN <-> OCT <-> DEC <-> HEX\n");
     console_color(15); kprintf("%s v%s | i386 protected mode\n", OS_NAME, OS_VER);
-    console_color(14); kputs("Ketik 'convert' untuk mulai | 'help umum' untuk bantuan\n");
+    console_color(14); kputs("Ketik 'convert' lalu klik basis asal/tujuan | 'help umum'\n");
     console_color(8);  kputs("-------------------------------------------------------------------------------\n");
     console_color(15);
     console_set_header_end();
@@ -57,7 +57,7 @@ static void help(const char *t) {
         row("clear",          "bersihkan layar (logo tetap di atas)");
         row("echo <teks>",    "cetak teks. Contoh: echo halo");
         row("uptime",         "sudah berapa lama OS menyala");
-        row("convert", "pilih angka, basis asal, dan tujuan");
+        row("convert", "pilih angka, asal, dan tujuan dengan klik");
         note("Contoh langsung: convert 2A hex bin");
         row("reboot / halt",  "restart OS / hentikan OS");
     } else if (t && !strcmp(t, "thread")) {
@@ -101,7 +101,7 @@ static void help(const char *t) {
         if (t) { console_color(12); kprintf("Kategori '%s' tidak ada.\n", t); console_color(15); }
         title("QuantumOS - ketik 'help <kategori>' untuk penjelasan + contoh");
         row("help umum",    "info OS, bersihkan layar, uptime, restart/matikan");
-        row("convert", "kalkulator basis BIN/OCT/DEC/HEX");
+        row("convert", "kalkulator klik BIN/OCT/DEC/HEX");
         row("help thread",  "lihat thread dan statusnya, info scheduler");
         row("help sinkron", "demo race condition dan deadlock (mutex)");
         row("help memori",  "lihat, minta, lepas memori; uji Out of Memory");
@@ -227,24 +227,60 @@ static void ask_conversion_field(const char *prompt, char *value, int max) {
     console_color(15); readline(value, max);
 }
 
+static void draw_base_buttons(const char *label, int *row, int *start) {
+    console_color(11); kprintf("%s: ", label);
+    console_get_cursor(start, row);
+    console_color(14); kputs("[ BIN ]  [ OCT ]  [ DEC ]  [ HEX ]\n");
+    console_color(15);
+}
+
+static int base_from_button(int x, int y, int row, int start) {
+    static const int values[4] = { 2, 8, 10, 16 };
+    if (y != row) return 0;
+    for (int i = 0; i < 4; i++)
+        if (x >= start + i * 9 && x < start + i * 9 + 7) return values[i];
+    return 0;
+}
+
+static int wait_for_base_button(int row, int start) {
+    static const int values[4] = { 2, 8, 10, 16 };
+    for (;;) {
+        int x, y;
+        if (console_get_mouse_click(&x, &y)) {
+            int base = base_from_button(x, y, row, start);
+            if (base) return base;
+        }
+        int key = console_getc_nb();
+        if (key >= '1' && key <= '4') {
+            kprintf("%c\n", key);
+            return values[key - '1'];
+        }
+        if (key == 27) return 0;
+        thread_yield();
+        if (!others_ready()) __asm__ volatile("sti; hlt");
+    }
+}
+
 static void convert_number(int ac, char **av) {
-    char number[64], from[16], to[16];
+    char number[64];
     int source = 0, target = 0;
     const char *input;
 
     if (ac == 1) {
-        kputs("\n");
-        console_color(11); kputs("[NUMBER BASE CALCULATOR]\n");
         ask_conversion_field("Angka: ", number, sizeof(number));
         if (!number[0]) { kputs("konversi dibatalkan\n"); return; }
-        ask_conversion_field("Dari [bin/oct/dec/hex]: ", from, sizeof(from));
-        ask_conversion_field("Ke   [bin/oct/dec/hex]: ", to, sizeof(to));
-        source = number_base(from);
-        target = number_base(to);
-        if (!source || !target) {
-            kputs("basis tidak dikenal; pilih bin, oct, dec, atau hex\n");
-            return;
-        }
+
+        console_color(7);
+        kputs("Klik tombol di jendela QEMU; tekan 1-4 sebagai alternatif.\n");
+        int source_row, source_x;
+        draw_base_buttons("DARI", &source_row, &source_x);
+        source = wait_for_base_button(source_row, source_x);
+        if (!source) { kputs("konversi dibatalkan\n"); return; }
+
+        int target_row, target_x;
+        draw_base_buttons("KE", &target_row, &target_x);
+        target = wait_for_base_button(target_row, target_x);
+        if (!target) { kputs("konversi dibatalkan\n"); return; }
         input = number;
     } else if (ac >= 2 && ac <= 4) {
         input = av[1];
