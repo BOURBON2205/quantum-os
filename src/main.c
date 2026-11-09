@@ -8,7 +8,9 @@ void kmain(void) {
     threads_init();
     fs_init();
     banner();
-        console_color(10);
+    console_color(11);
+    kprintf("[CORE] Number Base Calculator | BIN/OCT/DEC/HEX\n");
+    console_color(10);
     kprintf("[boot] GDT/IDT/PIC/PIT ok | heap ok | scheduler ok | ramfs ok\n\n");
     console_color(15);
     __asm__ volatile("sti");

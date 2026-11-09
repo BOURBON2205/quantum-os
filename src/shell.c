@@ -26,7 +26,7 @@ static void draw_quantumos(void) {
     }
 }
 
-void banner(void) {                                /* logo utuh + motif chip/orbit */
+void banner(void) {                                /* kalkulator basis QuantumOS */
     console_color(11);
     draw_quantumos();
     console_color(9);
@@ -34,11 +34,11 @@ void banner(void) {                                /* logo utuh + motif chip/orb
 "  .--------.        .------( |0> )------.\n"
 "--| Q-CORE |--o----(       Q       )----o---[ i386 ]\n"
 "  '--------'        '------( |1> )------'\n");
-    console_color(7);  kputs("Quantum-inspired kernel / protected mode\n");
-    console_color(15); kprintf("%s v%s", OS_NAME, OS_VER);
-    console_color(7);  kputs(" - Mini OS Tugas Besar Sistem Operasi (ITK) | ketik ");
-    console_color(14); kputs("help");
-    console_color(8);  kputs("\n-------------------------------------------------------------------------------\n");
+    console_color(11); kputs("NUMBER BASE CALCULATOR\n");
+    console_color(7);  kputs("BIN <-> OCT <-> DEC <-> HEX\n");
+    console_color(15); kprintf("%s v%s | i386 protected mode\n", OS_NAME, OS_VER);
+    console_color(14); kputs("Ketik 'convert' untuk mulai | 'help umum' untuk bantuan\n");
+    console_color(8);  kputs("-------------------------------------------------------------------------------\n");
     console_color(15);
     console_set_header_end();
 }
@@ -57,8 +57,8 @@ static void help(const char *t) {
         row("clear",          "bersihkan layar (logo tetap di atas)");
         row("echo <teks>",    "cetak teks. Contoh: echo halo");
         row("uptime",         "sudah berapa lama OS menyala");
-        row("convert <n> [basis]", "tampilkan 4 basis angka");
-        note("Contoh: convert 42 | convert 101010 bin hex");
+        row("convert", "pilih angka, basis asal, dan tujuan");
+        note("Contoh langsung: convert 2A hex bin");
         row("reboot / halt",  "restart OS / hentikan OS");
     } else if (t && !strcmp(t, "thread")) {
         title("[THREAD] alur kerja kecil di dalam kernel dan penjadwalannya");
@@ -101,13 +101,15 @@ static void help(const char *t) {
         if (t) { console_color(12); kprintf("Kategori '%s' tidak ada.\n", t); console_color(15); }
         title("QuantumOS - ketik 'help <kategori>' untuk penjelasan + contoh");
         row("help umum",    "info OS, bersihkan layar, uptime, restart/matikan");
-        row("convert <n>", "ubah biner, oktal, desimal, heksa");
+        row("convert", "kalkulator basis BIN/OCT/DEC/HEX");
         row("help thread",  "lihat thread dan statusnya, info scheduler");
         row("help sinkron", "demo race condition dan deadlock (mutex)");
         row("help memori",  "lihat, minta, lepas memori; uji Out of Memory");
         row("help berkas",  "buat, baca, ubah, hapus berkas");
         row("help akses",   "ganti user dan atur izin berkas");
-        note("Cepat coba: threads | race | deadlock | memtest | cat secret.txt");
+        note("Mulai konversi: ketik convert, lalu pilih basis asal dan tujuan");
+        note("Contoh langsung: convert 2A hex bin");
+        note("Demo lain: threads | race | deadlock | memtest");
         note("Edit baris: kiri/kanan geser kursor, atas/bawah riwayat, Home End Del");
     }
 }
@@ -197,30 +199,7 @@ static void format_number(u32 value, int negative, int base, char *out) {
     out[pos] = 0;
 }
 
-static void convert_number(int ac, char **av) {
-    if (ac < 2 || ac > 4) {
-        kputs("pakai: convert <angka> [asal [tujuan]]  (bin|oct|dec|hex)\n");
-        return;
-    }
-    int source = ac >= 3 ? number_base(av[2]) : 0;
-    int target = ac == 4 ? number_base(av[3]) : 0;
-    if ((ac >= 3 && !source) || (ac == 4 && !target)) {
-        kputs("basis tidak dikenal; gunakan bin, oct, dec, atau hex\n");
-        return;
-    }
-
-    u32 value; int negative;
-    if (!parse_number(av[1], source, &value, &negative)) {
-        kputs("angka tidak valid atau melebihi rentang 32-bit\n");
-        return;
-    }
-    if (target) {
-        char result[35];
-        format_number(value, negative, target, result);
-        kprintf("%s: %s\n", base_label(target), result);
-        return;
-    }
-
+static void show_all_bases(u32 value, int negative) {
     char bin[35], oct[35], dec[35], hex[35];
     format_number(value, negative, 2, bin);
     format_number(value, negative, 8, oct);
@@ -229,6 +208,59 @@ static void convert_number(int ac, char **av) {
     kprintf("BIN: %s\nOCT: %s\nDEC: %s\nHEX: %s\n", bin, oct, dec, hex);
 }
 
+static void show_conversion(const char *number, int source, int target) {
+    u32 value; int negative;
+    if (!parse_number(number, source, &value, &negative)) {
+        kputs("angka tidak valid atau melebihi rentang 32-bit\n");
+        return;
+    }
+    if (target) {
+        char result[35];
+        format_number(value, negative, target, result);
+        console_color(11); kprintf("%s: ", base_label(target));
+        console_color(15); kprintf("%s\n", result);
+    } else show_all_bases(value, negative);
+}
+
+static void ask_conversion_field(const char *prompt, char *value, int max) {
+    console_color(11); kputs(prompt);
+    console_color(15); readline(value, max);
+}
+
+static void convert_number(int ac, char **av) {
+    char number[64], from[16], to[16];
+    int source = 0, target = 0;
+    const char *input;
+
+    if (ac == 1) {
+        kputs("\n");
+        console_color(11); kputs("[NUMBER BASE CALCULATOR]\n");
+        ask_conversion_field("Angka: ", number, sizeof(number));
+        if (!number[0]) { kputs("konversi dibatalkan\n"); return; }
+        ask_conversion_field("Dari [bin/oct/dec/hex]: ", from, sizeof(from));
+        ask_conversion_field("Ke   [bin/oct/dec/hex]: ", to, sizeof(to));
+        source = number_base(from);
+        target = number_base(to);
+        if (!source || !target) {
+            kputs("basis tidak dikenal; pilih bin, oct, dec, atau hex\n");
+            return;
+        }
+        input = number;
+    } else if (ac >= 2 && ac <= 4) {
+        input = av[1];
+        if (ac >= 3) source = number_base(av[2]);
+        if (ac == 4) target = number_base(av[3]);
+        if ((ac >= 3 && !source) || (ac == 4 && !target)) {
+            kputs("basis tidak dikenal; gunakan bin, oct, dec, atau hex\n");
+            return;
+        }
+    } else {
+        kputs("pakai: convert [angka [asal [tujuan]]]\n");
+        return;
+    }
+
+    show_conversion(input, source, target);
+}
 
 void shell_run(void) {
     char line[128], orig[128]; char *av[8];
