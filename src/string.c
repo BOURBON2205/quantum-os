@@ -32,6 +32,13 @@ void *memcpy(void *d, const void *s, size_t n) {
     return d;
 }
 
+void *memmove(void *d, const void *s, size_t n) {
+    u8 *a = d; const u8 *b = s;
+    if (a < b) while (n--) *a++ = *b++;
+    else { a += n; b += n; while (n--) *--a = *--b; }
+    return d;
+}
+
 int atoi(const char *s) {
     int v = 0, neg = 0;
     if (*s == '-') { neg = 1; s++; }

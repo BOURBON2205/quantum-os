@@ -3,25 +3,110 @@
 
 static void *h_ptr[16]; static u32 h_sz[16];
 
-void banner(void) {
-    kputs("\n"
-"  ___  _   _   _    _   _ _____ _   _ __  __    ___  ____\n"
-" / _ \\| | | | / \\  | \\ | |_   _| | | |  \\/  |  / _ \\/ ___|\n"
-"| | | | | | |/ _ \\ |  \\| | | | | | | | |\\/| | | | | \\___ \\\n"
-"| |_| | |_| / ___ \\| |\\  | | | | |_| | |  | | | |_| |___) |\n"
-" \\__\\_\\\\___/_/   \\_\\_| \\_| |_|  \\___/|_|  |_|  \\___/|____/\n");
-    kprintf("\n  %s v%s - Mini OS Tugas Besar Sistem Operasi (ITK)\n", OS_NAME, OS_VER);
-    kprintf("  Ketik 'help' untuk daftar perintah.\n\n");
+static void draw_quantumos(void) {
+    static const char font[9][7][8] = {
+        { ".#####.", "##...##", "##...##", "##...##", "##.#.##", "##..###", ".######" }, /* Q */
+        { "##...##", "##...##", "##...##", "##...##", "##...##", "##...##", ".#####." }, /* U */
+        { "..###..", ".##.##.", "##...##", "##...##", "#######", "##...##", "##...##" }, /* A */
+        { "##...##", "###..##", "####.##", "##.####", "##..###", "##...##", "##...##" }, /* N */
+        { "#######", "...#...", "...#...", "...#...", "...#...", "...#...", "...#..." }, /* T */
+        { "##...##", "###.###", "#######", "##.#.##", "##...##", "##...##", "##...##" }, /* M */
+        { ".#####.", "##...##", "##...##", "##...##", "##...##", "##...##", ".#####." }, /* O */
+        { ".######", "##.....", "##.....", ".#####.", ".....##", ".....##", "######." }, /* S */
+    };
+    static const u8 letters[9] = { 0, 1, 2, 3, 4, 1, 5, 6, 7 };
+    for (int row = 0; row < 7; row++) {
+        kputs("    ");
+        for (int letter = 0; letter < 9; letter++) {
+            for (int col = 0; col < 7; col++)
+                kputc(font[letters[letter]][row][col] == '#' ? '#' : ' ');
+            if (letter < 8) kputc(' ');
+        }
+        kputc('\n');
+    }
 }
 
-static void help(void) {
-    kprintf(
-"Umum     : help  about  clear  echo <teks>  uptime  reboot  halt\n"
-"Thread   : ps  threads  sched  trace on|off  kill <tid>\n"
-"Sinkron  : race  deadlock  deadlock fix\n"
-"Memori   : meminfo  alloc <byte>  free <id>  memtest\n"
-"Berkas   : ls  touch <f>  write <f> <teks>  append <f> <teks>  cat <f>  rm <f>\n"
-"Akses    : whoami  su <root|guest> [password]  chmod <OW> <f>   (OW = dua digit oktal, mis. 64)\n");
+void banner(void) {                                /* logo utuh + motif chip/orbit */
+    console_color(11);
+    draw_quantumos();
+    console_color(9);
+    kputs(
+"  .--------.        .------( |0> )------.\n"
+"--| Q-CORE |--o----(       Q       )----o---[ i386 ]\n"
+"  '--------'        '------( |1> )------'\n");
+    console_color(7);  kputs("Quantum-inspired kernel / protected mode\n");
+    console_color(15); kprintf("%s v%s", OS_NAME, OS_VER);
+    console_color(7);  kputs(" - Mini OS Tugas Besar Sistem Operasi (ITK) | ketik ");
+    console_color(14); kputs("help");
+    console_color(8);  kputs("\n-------------------------------------------------------------------------------\n");
+    console_color(15);
+    console_set_header_end();
+}
+static void row(const char *k, const char *v) {      /* perintah (kuning) + penjelasan (putih) */
+    console_color(14); kprintf("%s", k);
+    for (int i = (int)strlen(k); i < 20; i++) kputc(' ');
+    console_color(15); kprintf("%s\n", v);
+}
+static void title(const char *t) { console_color(11); kprintf("%s\n", t); console_color(15); }
+static void note(const char *t)  { console_color(7);  kprintf("%s\n", t); console_color(15); }
+
+static void help(const char *t) {
+    if (t && !strcmp(t, "umum")) {
+        title("[UMUM] info dan kontrol dasar");
+        row("about",          "tampilkan info versi OS");
+        row("clear",          "bersihkan layar (logo tetap di atas)");
+        row("echo <teks>",    "cetak teks. Contoh: echo halo");
+        row("uptime",         "sudah berapa lama OS menyala");
+        row("reboot / halt",  "restart OS / hentikan OS");
+    } else if (t && !strcmp(t, "thread")) {
+        title("[THREAD] alur kerja kecil di dalam kernel dan penjadwalannya");
+        row("ps",             "daftar thread + status (READY, RUNNING, WAITING, ...)");
+        row("threads",        "DEMO: jalankan 2 thread, tampilkan perubahan statusnya");
+        row("sched",          "info scheduler: Round Robin, quantum, jumlah ganti thread");
+        row("trace on|off",   "tampilkan/sembunyikan log perubahan status thread");
+        row("kill <tid>",     "hentikan thread. Nomor tid lihat di 'ps'");
+        note("Mulai dari: threads  lalu  ps");
+    } else if (t && !strcmp(t, "sinkron")) {
+        title("[SINKRON] dua thread berbagi data: race condition dan deadlock");
+        row("race",           "DEMO race condition: tanpa lock salah, dengan mutex benar");
+        note("                    (butuh +-20 detik, tunggu sampai kedua hasil muncul)");
+        row("deadlock",       "DEMO: 2 thread saling menunggu, lalu terdeteksi OS");
+        row("deadlock fix",   "DEMO solusi: urutan ambil mutex disamakan -> tidak macet");
+        note("Setelah 'deadlock': ketik ps, lalu kill <tid> untuk membersihkan");
+    } else if (t && !strcmp(t, "memori")) {
+        title("[MEMORI] alokator heap 512 KB");
+        row("meminfo",        "total, terpakai, dan tersedia");
+        row("alloc <byte>",   "minta memori, dapat nomor handle. Contoh: alloc 1000");
+        row("free <handle>",  "lepas memori. Contoh: free 0");
+        row("memtest",        "DEMO: habiskan memori sampai Out of Memory (aman)");
+    } else if (t && !strcmp(t, "berkas")) {
+        title("[BERKAS] sistem berkas di RAM (hilang saat OS mati)");
+        row("ls",                  "daftar berkas, pemilik, dan izin");
+        row("touch <f>",           "buat berkas kosong");
+        row("write <f> <teks>",    "isi berkas (menimpa isi lama)");
+        row("append <f> <teks>",   "tambah teks di akhir berkas");
+        row("cat <f>",             "tampilkan isi berkas");
+        row("rm <f>",              "hapus berkas");
+        note("Contoh: touch a.txt  ->  write a.txt halo  ->  cat a.txt");
+    } else if (t && !strcmp(t, "akses")) {
+        title("[AKSES] user dan izin berkas");
+        row("whoami",              "user saat ini (awal: guest)");
+        row("su <user> [pass]",    "ganti user: root (password: toor) atau guest");
+        row("chmod <OW> <f>",      "atur izin: O=pemilik, W=lainnya (dua digit)");
+        note("                    angka: 4=baca  2=tulis  6=baca+tulis  0=tidak ada");
+        note("Coba: cat secret.txt (ditolak) -> su root toor -> cat secret.txt");
+    } else {
+        if (t) { console_color(12); kprintf("Kategori '%s' tidak ada.\n", t); console_color(15); }
+        title("QuantumOS - ketik 'help <kategori>' untuk penjelasan + contoh");
+        row("help umum",    "info OS, bersihkan layar, uptime, restart/matikan");
+        row("help thread",  "lihat thread dan statusnya, info scheduler");
+        row("help sinkron", "demo race condition dan deadlock (mutex)");
+        row("help memori",  "lihat, minta, lepas memori; uji Out of Memory");
+        row("help berkas",  "buat, baca, ubah, hapus berkas");
+        row("help akses",   "ganti user dan atur izin berkas");
+        note("Cepat coba: threads | race | deadlock | memtest | cat secret.txt");
+        note("Edit baris: kiri/kanan geser kursor, atas/bawah riwayat, Home End Del");
+    }
 }
 
 static int split(char *line, char **argv, int max) {
@@ -49,13 +134,14 @@ static void report(int r) { if (r < 0) kprintf("Error: %s\n", fs_err(r)); }
 void shell_run(void) {
     char line[128], orig[128]; char *av[8];
     for (;;) {
-        kprintf("%s@quantum> ", uid_name(cur_uid));
+        console_color(cur_uid == 0 ? 12 : 10); kprintf("%s@quantum", uid_name(cur_uid));
+        console_color(14); kprintf("> "); console_color(15);
         readline(line, sizeof(line));
         memcpy(orig, line, sizeof(line));
         int ac = split(line, av, 8);
         if (!ac) continue;
         const char *c = av[0];
-        if      (!strcmp(c, "help"))   help();
+      if      (!strcmp(c, "help"))   help(ac > 1 ? av[1] : 0);
         else if (!strcmp(c, "about"))  kprintf("%s v%s | i386 protected mode | C + GNU as | preemptive RR | RAMFS\n", OS_NAME, OS_VER);
         else if (!strcmp(c, "clear"))  console_clear();
         else if (!strcmp(c, "echo"))   kprintf("%s\n", rest(orig, 1));

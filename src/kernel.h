@@ -24,6 +24,7 @@ int    strncmp(const char *a, const char *b, size_t n);
 char  *strncpy(char *d, const char *s, size_t n);
 void  *memset(void *d, int c, size_t n);
 void  *memcpy(void *d, const void *s, size_t n);
+void  *memmove(void *d, const void *s, size_t n);
 int    atoi(const char *s);
 
 /* ---------- console.c ---------- */
@@ -32,6 +33,15 @@ void kputc(char c);
 void kputs(const char *s);
 void kprintf(const char *fmt, ...);
 void console_clear(void);
+void console_color(u8 c);              /* warna teks 0-15 (VGA) + ANSI di serial */
+void console_set_header_end(void);     /* baris di atas posisi kursor jadi header tetap */
+#define KEY_UP    0x101
+#define KEY_DOWN  0x102
+#define KEY_LEFT  0x103
+#define KEY_RIGHT 0x104
+#define KEY_HOME  0x105
+#define KEY_END   0x106
+#define KEY_DEL   0x107
 int  console_getc_nb(void);          /* -1 jika tidak ada input */
 int  readline(char *buf, int max);
 
