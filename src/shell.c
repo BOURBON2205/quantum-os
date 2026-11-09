@@ -57,6 +57,8 @@ static void help(const char *t) {
         row("clear",          "bersihkan layar (logo tetap di atas)");
         row("echo <teks>",    "cetak teks. Contoh: echo halo");
         row("uptime",         "sudah berapa lama OS menyala");
+        row("convert <n> [basis]", "tampilkan 4 basis angka");
+        note("Contoh: convert 42 | convert 101010 bin hex");
         row("reboot / halt",  "restart OS / hentikan OS");
     } else if (t && !strcmp(t, "thread")) {
         title("[THREAD] alur kerja kecil di dalam kernel dan penjadwalannya");
@@ -99,6 +101,7 @@ static void help(const char *t) {
         if (t) { console_color(12); kprintf("Kategori '%s' tidak ada.\n", t); console_color(15); }
         title("QuantumOS - ketik 'help <kategori>' untuk penjelasan + contoh");
         row("help umum",    "info OS, bersihkan layar, uptime, restart/matikan");
+        row("convert <n>", "ubah biner, oktal, desimal, heksa");
         row("help thread",  "lihat thread dan statusnya, info scheduler");
         row("help sinkron", "demo race condition dan deadlock (mutex)");
         row("help memori",  "lihat, minta, lepas memori; uji Out of Memory");
@@ -131,6 +134,102 @@ static void reboot(void) { outb(0x64, 0xFE); for (;;) __asm__ volatile("hlt"); }
 
 static void report(int r) { if (r < 0) kprintf("Error: %s\n", fs_err(r)); }
 
+static int digit_value(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static int number_base(const char *s) {
+    if (!strcmp(s, "bin") || !strcmp(s, "binary") || !strcmp(s, "biner") || !strcmp(s, "2")) return 2;
+    if (!strcmp(s, "oct") || !strcmp(s, "octal") || !strcmp(s, "oktal") || !strcmp(s, "8")) return 8;
+    if (!strcmp(s, "dec") || !strcmp(s, "decimal") || !strcmp(s, "desimal") || !strcmp(s, "10")) return 10;
+    if (!strcmp(s, "hex") || !strcmp(s, "hexadecimal") || !strcmp(s, "heksadesimal") || !strcmp(s, "16")) return 16;
+    return 0;
+}
+
+static int parse_number(const char *s, int requested_base, u32 *value, int *negative) {
+    int sign = 0;
+    if (*s == '-' || *s == '+') { sign = (*s == '-'); s++; }
+    if (!*s) return 0;
+
+    int prefix_base = 0;
+    if (s[0] == '0' && (s[1] == 'b' || s[1] == 'B')) prefix_base = 2;
+    else if (s[0] == '0' && (s[1] == 'o' || s[1] == 'O')) prefix_base = 8;
+    else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) prefix_base = 16;
+    if (prefix_base) {
+        if (requested_base && requested_base != prefix_base) return 0;
+        requested_base = prefix_base;
+        s += 2;
+    }
+    int base = requested_base ? requested_base : 10;
+    if (!*s) return 0;
+
+    u32 n = 0;
+    for (; *s; s++) {
+        int d = digit_value(*s);
+        if (d < 0 || d >= base || n > (0xFFFFFFFFU - (u32)d) / (u32)base) return 0;
+        n = n * (u32)base + (u32)d;
+    }
+    if (sign && n > 0x80000000U) return 0;
+    *value = n;
+    *negative = sign;
+    return 1;
+}
+
+static const char *base_label(int base) {
+    switch (base) {
+    case 2: return "BIN";
+    case 8: return "OCT";
+    case 10: return "DEC";
+    default: return "HEX";
+    }
+}
+
+static void format_number(u32 value, int negative, int base, char *out) {
+    static const char digits[] = "0123456789ABCDEF";
+    char reverse[32];
+    int n = 0, pos = 0;
+    do { reverse[n++] = digits[value % (u32)base]; value /= (u32)base; } while (value);
+    if (negative) out[pos++] = '-';
+    while (n) out[pos++] = reverse[--n];
+    out[pos] = 0;
+}
+
+static void convert_number(int ac, char **av) {
+    if (ac < 2 || ac > 4) {
+        kputs("pakai: convert <angka> [asal [tujuan]]  (bin|oct|dec|hex)\n");
+        return;
+    }
+    int source = ac >= 3 ? number_base(av[2]) : 0;
+    int target = ac == 4 ? number_base(av[3]) : 0;
+    if ((ac >= 3 && !source) || (ac == 4 && !target)) {
+        kputs("basis tidak dikenal; gunakan bin, oct, dec, atau hex\n");
+        return;
+    }
+
+    u32 value; int negative;
+    if (!parse_number(av[1], source, &value, &negative)) {
+        kputs("angka tidak valid atau melebihi rentang 32-bit\n");
+        return;
+    }
+    if (target) {
+        char result[35];
+        format_number(value, negative, target, result);
+        kprintf("%s: %s\n", base_label(target), result);
+        return;
+    }
+
+    char bin[35], oct[35], dec[35], hex[35];
+    format_number(value, negative, 2, bin);
+    format_number(value, negative, 8, oct);
+    format_number(value, negative, 10, dec);
+    format_number(value, negative, 16, hex);
+    kprintf("BIN: %s\nOCT: %s\nDEC: %s\nHEX: %s\n", bin, oct, dec, hex);
+}
+
+
 void shell_run(void) {
     char line[128], orig[128]; char *av[8];
     for (;;) {
@@ -142,6 +241,7 @@ void shell_run(void) {
         if (!ac) continue;
         const char *c = av[0];
       if      (!strcmp(c, "help"))   help(ac > 1 ? av[1] : 0);
+        else if (!strcmp(c, "convert")) convert_number(ac, av);
         else if (!strcmp(c, "about"))  kprintf("%s v%s | i386 protected mode | C + GNU as | preemptive RR | RAMFS\n", OS_NAME, OS_VER);
         else if (!strcmp(c, "clear"))  console_clear();
         else if (!strcmp(c, "echo"))   kprintf("%s\n", rest(orig, 1));
